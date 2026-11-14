@@ -1,0 +1,62 @@
+name: Check for new Rust stable release
+
+on:
+  schedule:
+    - cron: "2 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: check-upstream
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # required to dispatch release.yml
+
+jobs:
+  check:
+    name: Compare upstream vs published
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect and dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          VERSION_INPUT="rust_stable_version"
+
+          # Rust publishes no GitHub Releases for its binaries; the stable
+          # channel manifest on static.rust-lang.org is the source of truth.
+          # [pkg.rust] version = "1.100.0 (0ef1bc386 2026-11-09)" -> 1.100.0
+          # Fetch first, then parse: awk exits at the first match, which would
+          # make a piped curl fail with "Failure writing output" under pipefail.
+          manifest=$(curl -sSf https://static.rust-lang.org/dist/channel-rust-stable.toml)
+          up_ver=$(awk '$0 == "[pkg.rust]" { f = 1; next } f && $1 == "version" { gsub(/"/, "", $3); print $3; exit }' <<< "$manifest")
+          if ! [[ "$up_ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Could not read the stable version from channel-rust-stable.toml (got '${up_ver}'); aborting."
+            exit 1
+          fi
+          echo "Upstream: ${up_ver}"
+
+          # Our latest published release is "<ver>+<build>"; 404 -> empty -> build it.
+          ours=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" -q .tag_name 2>/dev/null || echo "")
+          ours_ver="${ours%%+*}"
+          echo "Ours: ${ours:-<none>} -> ${ours_ver:-<none>}"
+
+          if [ "$up_ver" = "$ours_ver" ]; then
+            echo "Up to date."
+            exit 0
+          fi
+
+          # Don't dispatch a duplicate while a build is already running/queued.
+          active=$(gh run list --workflow=release.yml --json status \
+            -q '[.[] | select(.status == "in_progress" or .status == "queued")] | length')
+          if [ "$active" -gt 0 ]; then
+            echo "A release.yml run is already active ($active); skipping this tick."
+            exit 0
+          fi
+
+          echo "New release detected: ${ours_ver:-<none>} -> ${up_ver}. Dispatching build."
+          gh workflow run release.yml -f "${VERSION_INPUT}=${up_ver}" -f build_version=1 -f architecture=all

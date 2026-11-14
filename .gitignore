@@ -1,0 +1,21 @@
+# Build artifacts
+*.deb
+*.dsc
+*.orig.tar.gz
+*.debian.tar.xz
+*.buildinfo
+*.changes
+out/
+/t/
+
+# Upstream download / unpack (debian/rules, build_src.sh)
+dl/
+channel-rust-*.toml
+channel-rust-*.toml.asc
+verified-manifest
+debian/gnupg/
+rust-stable-[0-9]*/
+
+# Editors / OS
+.idea/*
+.DS_Store

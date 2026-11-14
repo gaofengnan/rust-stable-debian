@@ -1,0 +1,135 @@
+#!/usr/bin/make -f
+# Repackage the official Rust stable toolchain from static.rust-lang.org.
+# Nothing is compiled: the component tarballs rustup would install are
+# downloaded, verified and laid out under /usr/lib/rust-stable (the sysroot),
+# with the commands linked into /usr/bin.
+#
+# Trust chain: the per-release manifest channel-rust-<ver>.toml is checked
+# against its detached signature with the Rust release signing key
+# (debian/upstream/signing-key.asc, fingerprint
+# 108F 6620 5EAE B0AA A8DD 5E1C 85AB 96E6 FA1B E5FE), and every tarball is
+# checked against the SHA-256 that manifest records (debian/fetch-component).
+
+include /usr/share/dpkg/architecture.mk
+
+# Upstream version, from the changelog with the Debian revision stripped
+# (1.100.0-1~griffo -> 1.100.0).
+VERSION  := $(shell dpkg-parsechangelog -S Version | sed 's/[-~].*//')
+DIST     := https://static.rust-lang.org/dist
+MANIFEST := channel-rust-$(VERSION).toml
+
+# Rust target triples for the two architectures upstream publishes host
+# toolchains for that we ship.
+HOST_amd64 := x86_64-unknown-linux-gnu
+HOST_arm64 := aarch64-unknown-linux-gnu
+MUSL_amd64 := x86_64-unknown-linux-musl
+MUSL_arm64 := aarch64-unknown-linux-musl
+HOST := $(HOST_$(DEB_HOST_ARCH))
+MUSL := $(MUSL_$(DEB_HOST_ARCH))
+
+SYSROOT := usr/lib/rust-stable
+FETCH   := sh debian/fetch-component $(MANIFEST)
+WASM    := wasm32-unknown-unknown wasm32-wasip1 wasm32-wasip2
+
+# Components that make up the rust-stable package (rustup's default profile
+# without the docs, plus rust-analyzer)
+TOOLS := rustc cargo rustfmt-preview clippy-preview rust-analyzer-preview
+# Commands linked into /usr/bin
+BINS  := rustc rustdoc cargo rustfmt cargo-fmt cargo-clippy clippy-driver \
+         rust-analyzer rust-gdb rust-gdbgui rust-lldb
+
+MAIN := debian/rust-stable
+
+%:
+	dh $@
+
+# The source package carries the manifest and its signature in the orig
+# tarball; the Docker build fetches them. Either way the signature is checked.
+verified-manifest:
+	[ -f $(MANIFEST) ] || wget -q -O $(MANIFEST) $(DIST)/$(MANIFEST)
+	[ -f $(MANIFEST).asc ] || wget -q -O $(MANIFEST).asc $(DIST)/$(MANIFEST).asc
+	rm -rf debian/gnupg && mkdir -m 700 debian/gnupg
+	gpg --batch --quiet --homedir debian/gnupg --dearmor \
+		< debian/upstream/signing-key.asc > debian/gnupg/rust.gpg
+	gpgv --keyring $(CURDIR)/debian/gnupg/rust.gpg $(MANIFEST).asc $(MANIFEST)
+	# The manifest must describe the version being packaged
+	grep -A1 -x '\[pkg.rust\]' $(MANIFEST) | grep -q '^version = "$(VERSION) '
+	touch $@
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+
+override_dh_auto_test:
+
+override_dh_auto_install-arch: verified-manifest
+	@if [ -z "$(HOST)" ]; then \
+		echo "Unsupported architecture $(DEB_HOST_ARCH): rust-stable ships amd64 and arm64" >&2; \
+		exit 1; \
+	fi
+	# --- rust-stable: the toolchain in the sysroot ---------------------------
+	for c in $(TOOLS); do $(FETCH) $$c $(HOST) $(MAIN)/$(SYSROOT) || exit 1; done
+	$(FETCH) rust-std $(HOST) $(MAIN)/$(SYSROOT)
+	# Layout guard: fail loudly if upstream changes the component shape
+	for b in $(BINS); do test -x $(MAIN)/$(SYSROOT)/bin/$$b || { echo "missing bin/$$b" >&2; exit 1; }; done
+	test -d $(MAIN)/$(SYSROOT)/lib/rustlib/$(HOST)/lib
+	test -f $(MAIN)/$(SYSROOT)/etc/bash_completion.d/cargo
+	test -f $(MAIN)/$(SYSROOT)/share/zsh/site-functions/_cargo
+	test -d $(MAIN)/$(SYSROOT)/share/man/man1
+	# Man pages, completions and licence files go where man, the shells and
+	# /usr/share/doc expect them
+	install -d $(MAIN)/usr/share
+	mv $(MAIN)/$(SYSROOT)/share/man $(MAIN)/usr/share/man
+	install -D -m 0644 $(MAIN)/$(SYSROOT)/etc/bash_completion.d/cargo \
+		$(MAIN)/usr/share/bash-completion/completions/cargo
+	install -D -m 0644 $(MAIN)/$(SYSROOT)/share/zsh/site-functions/_cargo \
+		$(MAIN)/usr/share/zsh/vendor-completions/_cargo
+	rm -r $(MAIN)/$(SYSROOT)/etc/bash_completion.d $(MAIN)/$(SYSROOT)/share/zsh
+	install -d $(MAIN)/usr/share/doc/rust-stable
+	mv $(MAIN)/$(SYSROOT)/share/doc/* $(MAIN)/usr/share/doc/rust-stable/
+	rmdir $(MAIN)/$(SYSROOT)/share/doc $(MAIN)/$(SYSROOT)/share
+	# Commands: rustc finds its sysroot through the symlink
+	install -d $(MAIN)/usr/bin
+	for b in $(BINS); do ln -s ../lib/rust-stable/bin/$$b $(MAIN)/usr/bin/$$b; done
+	# --- rust-stable-std-musl ------------------------------------------------
+	$(FETCH) rust-std $(MUSL) debian/rust-stable-std-musl/$(SYSROOT)
+	test -d debian/rust-stable-std-musl/$(SYSROOT)/lib/rustlib/$(MUSL)/lib
+
+override_dh_auto_install-indep: verified-manifest
+	# --- rust-stable-src -----------------------------------------------------
+	$(FETCH) rust-src '"*"' debian/rust-stable-src/$(SYSROOT)
+	test -d debian/rust-stable-src/$(SYSROOT)/lib/rustlib/src/rust/library/std
+	# --- rust-stable-doc: the HTML is the same for every host ----------------
+	$(FETCH) rust-docs x86_64-unknown-linux-gnu debian/rust-stable-doc/tmp
+	test -f debian/rust-stable-doc/tmp/share/doc/rust/html/index.html
+	install -d debian/rust-stable-doc/usr/share/doc/rust-stable-doc
+	mv debian/rust-stable-doc/tmp/share/doc/rust/html debian/rust-stable-doc/usr/share/doc/rust-stable-doc/html
+	rm -r debian/rust-stable-doc/tmp
+	# --- rust-stable-std-wasm32-* --------------------------------------------
+	for t in $(WASM); do \
+		$(FETCH) rust-std $$t debian/rust-stable-std-$$t/$(SYSROOT) || exit 1; \
+		test -d debian/rust-stable-std-$$t/$(SYSROOT)/lib/rustlib/$$t/lib || exit 1; \
+	done
+
+# Leave the HTML docs readable in place
+override_dh_compress:
+	dh_compress -X/html
+
+# Upstream's binaries ship as built, byte for byte: no stripping, no dwz,
+# no normalising of the .a/.rlib archives. Also lets the arm64 packages be
+# assembled on an amd64 builder without cross binutils.
+override_dh_strip:
+
+override_dh_dwz:
+
+override_dh_strip_nondeterminism:
+
+# The libraries in the sysroot (librustc_driver, libLLVM, libstd) are
+# private to the toolchain: no shlibs file, and the few system libraries it
+# needs are declared by hand in debian/control.
+override_dh_makeshlibs:
+
+override_dh_shlibdeps:
+
+override_dh_auto_clean:
+	rm -rf dl debian/gnupg verified-manifest

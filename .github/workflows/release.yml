@@ -1,0 +1,113 @@
+name: Build rust-stable for Debian and Ubuntu
+
+on:
+  workflow_dispatch:
+    inputs:
+      rust_stable_version:
+        description: The Rust stable version to package (e.g. 1.100.0).
+        type: string
+        required: true
+      build_version:
+        description: The build (packaging) version.
+        type: string
+        required: true
+      architecture:
+        description: Architecture to build (amd64, arm64, or 'all' for both)
+        type: choice
+        default: 'all'
+        options:
+          - 'all'
+          - 'amd64'
+          - 'arm64'
+
+permissions:
+  contents: write
+
+jobs:
+  build-debian:
+    name: Build (${{ matrix.arch }})
+    # Both architectures run on amd64: the toolchain is only unpacked and
+    # copied, never executed, so no emulation or native arm64 runner is needed.
+    strategy:
+      matrix:
+        arch: ${{ fromJSON(inputs.architecture == 'all' && '["amd64","arm64"]' || format('["{0}"]', inputs.architecture)) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rust-stable-debian
+        uses: actions/checkout@v4
+
+      - name: Validate upstream license permits paid distribution
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./validate_license.sh ${{ inputs.rust_stable_version }}
+
+      - name: Build .deb packages
+        env:
+          # The amd64 job builds the arch:all packages; when both run, the
+          # arm64 job skips them so the release has one copy of each.
+          SKIP_ARCH_ALL: ${{ (inputs.architecture == 'all' && matrix.arch == 'arm64') && '1' || '' }}
+        run: ./build_debian.sh ${{ inputs.rust_stable_version }} ${{ inputs.build_version }} ${{ matrix.arch }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-${{ matrix.arch }}
+          path: out/rust-stable*.deb
+
+  build-src:
+    name: Build Source Packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rust-stable-debian
+        uses: actions/checkout@v4
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dpkg-dev devscripts wget ca-certificates
+
+      - name: Build source packages
+        run: ./build_src.sh ${{ inputs.rust_stable_version }} ${{ inputs.build_version }}
+
+      - name: Upload Source Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-artifact
+          path: |
+            rust-stable_*.dsc
+            rust-stable_*.orig.tar.gz
+            rust-stable_*.debian.tar.xz
+
+  release-rust-stable:
+    name: Release rust-stable for Debian and Ubuntu
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [build-debian, build-src]
+    steps:
+      - name: Download binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifact-*
+          merge-multiple: true
+
+      - name: Download source artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: source-artifact
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          files: |
+            rust-stable_*.deb
+            rust-stable-std-musl_*.deb
+            rust-stable-src_*.deb
+            rust-stable-doc_*.deb
+            rust-stable-std-wasm32-unknown-unknown_*.deb
+            rust-stable-std-wasm32-wasip1_*.deb
+            rust-stable-std-wasm32-wasip2_*.deb
+            rust-stable_*.dsc
+            rust-stable_*.orig.tar.gz
+            rust-stable_*.debian.tar.xz
+          name: ${{ inputs.rust_stable_version }}+${{ inputs.build_version }}
+          tag_name: ${{ inputs.rust_stable_version }}+${{ inputs.build_version }}
+          fail_on_unmatched_files: true

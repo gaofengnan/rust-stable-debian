@@ -1,0 +1,68 @@
+#!/bin/sh
+# fetch-component <manifest> <component> <target> <destdir>
+#
+# Download one component tarball listed in Rust's release manifest
+# (channel-rust-<version>.toml), check it against the SHA-256 the manifest
+# records, and merge its payload into <destdir>.
+#
+# The manifest itself is GPG-verified by debian/rules before this runs, so
+# every byte that lands in a package is covered by the Rust release signing
+# key: signature -> manifest -> per-tarball hash.
+#
+# <target> is the manifest's target key: a triple such as
+# x86_64-unknown-linux-gnu, or '"*"' (with the quotes) for target-independent
+# components such as rust-src.
+set -eu
+
+MANIFEST=$1
+COMPONENT=$2
+TARGET=$3
+DEST=$4
+
+fail() { echo "fetch-component: $*" >&2; exit 1; }
+
+SECTION="[pkg.${COMPONENT}.target.${TARGET}]"
+field() {
+    awk -v s="$SECTION" -v k="$1" '
+        $0 == s { f = 1; next }
+        /^\[/   { f = 0 }
+        f && $1 == k { v = $3; gsub(/"/, "", v); print v; exit }
+    ' "$MANIFEST"
+}
+
+AVAILABLE=$(field available)
+URL=$(field xz_url)
+HASH=$(field xz_hash)
+
+[ "$AVAILABLE" = "true" ] || fail "${COMPONENT} for ${TARGET} is not available in ${MANIFEST}"
+[ -n "$URL" ] && [ -n "$HASH" ] || fail "no xz_url/xz_hash for ${COMPONENT} ${TARGET} in ${MANIFEST}"
+case "$URL" in
+    https://static.rust-lang.org/dist/*) ;;
+    *) fail "unexpected download host in ${URL}" ;;
+esac
+
+mkdir -p dl
+FILE="dl/${URL##*/}"
+if [ ! -f "$FILE" ]; then
+    echo "  downloading ${URL##*/}"
+    wget -q -O "${FILE}.part" "$URL" || { rm -f "${FILE}.part"; fail "download failed: ${URL}"; }
+    mv "${FILE}.part" "$FILE"
+fi
+if ! echo "${HASH}  ${FILE}" | sha256sum -c --quiet -; then
+    rm -f "$FILE"
+    fail "SHA-256 mismatch for ${FILE}"
+fi
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+tar -xJf "$FILE" -C "$TMP"
+TOP=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d)
+[ -n "$TOP" ] && [ -f "$TOP/components" ] || fail "unexpected tarball layout in ${FILE}"
+
+mkdir -p "$DEST"
+for c in $(cat "$TOP/components"); do
+    [ -d "$TOP/$c" ] || fail "component directory $c missing from ${FILE}"
+    cp -a "$TOP/$c/." "$DEST/"
+done
+# rust-installer bookkeeping, not part of the toolchain
+rm -f "$DEST/manifest.in"

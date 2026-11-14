@@ -1,0 +1,140 @@
+Source: rust-stable
+Section: devel
+Priority: optional
+Maintainer: Dario Griffo <dariogriffo@gmail.com>
+Build-Depends: debhelper-compat (= 13), wget, ca-certificates, xz-utils, gpg, gpgv
+Standards-Version: 4.6.2
+Homepage: https://www.rust-lang.org/
+Rules-Requires-Root: no
+
+Package: rust-stable
+Architecture: amd64 arm64
+Depends: libc6 (>= 2.17),
+         libgcc-s1,
+         zlib1g,
+         gcc | clang | c-compiler,
+         libc6-dev | libc-dev,
+         ${misc:Depends}
+Recommends: rust-stable-src (= ${binary:Version})
+Suggests: rust-stable-doc,
+          rust-stable-std-musl,
+          rust-stable-std-wasm32-unknown-unknown,
+          rust-stable-std-wasm32-wasip1,
+          rust-stable-std-wasm32-wasip2,
+          gdb | lldb
+Conflicts: rustc,
+           cargo,
+           rustfmt,
+           rust-clippy,
+           rust-gdb,
+           rust-lldb,
+           rust-analyzer,
+           rustup,
+           rustc-web,
+           cargo-web,
+           rustfmt-web,
+           rust-web-gdb,
+           rust-web-clippy,
+           rust-web-lldb,
+           rust-web-analyzer,
+           cargo-1.74
+Replaces: rustc,
+          cargo,
+          rustfmt,
+          rust-clippy,
+          rust-gdb,
+          rust-lldb,
+          rust-analyzer,
+          rustup,
+          rustc-web,
+          cargo-web,
+          rustfmt-web,
+          rust-web-gdb,
+          rust-web-clippy,
+          rust-web-lldb,
+          rust-web-analyzer,
+          cargo-1.74
+Description: Rust programming language toolchain (official stable release)
+ The official Rust stable toolchain as published by the Rust project:
+ rustc, cargo, rustdoc, rustfmt, clippy and rust-analyzer, plus the
+ standard library for the host. The binaries are exactly the ones rustup
+ installs, verified against the Rust release signing key, and updated with
+ every stable release.
+ .
+ The toolchain lives in /usr/lib/rust-stable with its own bundled LLVM, and
+ the commands are linked into /usr/bin. It replaces the distribution's
+ rustc, cargo, rustfmt, rust-clippy, rust-analyzer and rustup packages
+ (apt lists what it removes and asks first) and leaves the system LLVM and
+ Ubuntu's versioned rustc-1.XX packages untouched.
+ .
+ This is an unofficial package.
+
+Package: rust-stable-src
+Architecture: all
+Multi-Arch: foreign
+Depends: rust-stable (= ${binary:Version}), ${misc:Depends}
+Description: Rust programming language toolchain (standard library source)
+ Source code of the Rust standard library for the rust-stable toolchain,
+ in its sysroot (what rustup calls the rust-src component). rust-analyzer
+ needs it for completion and go-to-definition into std.
+ .
+ This is an unofficial package.
+
+Package: rust-stable-doc
+Architecture: all
+Multi-Arch: foreign
+Section: doc
+Depends: ${misc:Depends}
+Enhances: rust-stable
+Description: Rust programming language toolchain (offline documentation)
+ The offline HTML documentation shipped with each Rust release: the
+ standard library API, The Rust Programming Language book, Rust by
+ Example, the Cargo book, the reference, the edition guide and more,
+ under /usr/share/doc/rust-stable-doc/html.
+ .
+ This is an unofficial package.
+
+Package: rust-stable-std-musl
+Architecture: amd64 arm64
+Depends: rust-stable (= ${binary:Version}), ${misc:Depends}
+Description: Rust programming language toolchain (musl target)
+ The Rust standard library for the host's musl target
+ (x86_64-unknown-linux-musl on amd64, aarch64-unknown-linux-musl on
+ arm64), for building fully static Linux binaries with
+ cargo build --target <triple>. It brings its own musl C library, so no
+ musl-tools package is needed.
+ .
+ This is an unofficial package.
+
+Package: rust-stable-std-wasm32-unknown-unknown
+Architecture: all
+Multi-Arch: foreign
+Depends: rust-stable (= ${binary:Version}), ${misc:Depends}
+Description: Rust programming language toolchain (wasm32-unknown-unknown target)
+ The Rust standard library for the wasm32-unknown-unknown target, used for
+ WebAssembly in the browser (wasm-bindgen, wasm-pack, Trunk, Leptos,
+ Yew). Linking uses the rust-lld that ships with rust-stable.
+ .
+ This is an unofficial package.
+
+Package: rust-stable-std-wasm32-wasip1
+Architecture: all
+Multi-Arch: foreign
+Depends: rust-stable (= ${binary:Version}), ${misc:Depends}
+Description: Rust programming language toolchain (wasm32-wasip1 target)
+ The Rust standard library for the wasm32-wasip1 target (WASI preview 1),
+ for WebAssembly programs that run under wasmtime, wasmer and other WASI
+ runtimes.
+ .
+ This is an unofficial package.
+
+Package: rust-stable-std-wasm32-wasip2
+Architecture: all
+Multi-Arch: foreign
+Depends: rust-stable (= ${binary:Version}), ${misc:Depends}
+Description: Rust programming language toolchain (wasm32-wasip2 target)
+ The Rust standard library for the wasm32-wasip2 target (WASI preview 2,
+ the component model). Components are produced with the wasm-component-ld
+ that ships with rust-stable.
+ .
+ This is an unofficial package.
