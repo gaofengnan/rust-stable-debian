@@ -13,7 +13,7 @@
 include /usr/share/dpkg/architecture.mk
 
 # Upstream version, from the changelog with the Debian revision stripped
-# (1.100.0-1~griffo -> 1.100.0).
+# (1.100.0-1~gaofn -> 1.100.0).
 VERSION  := $(shell dpkg-parsechangelog -S Version | sed 's/[-~].*//')
 DIST     := https://static.rust-lang.org/dist
 MANIFEST := channel-rust-$(VERSION).toml

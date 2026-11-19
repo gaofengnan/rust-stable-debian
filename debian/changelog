@@ -1,5 +1,5 @@
-rust-stable (0.0.0-1~griffo) stable; urgency=medium
+rust-stable (0.0.0-1~gaofn) stable; urgency=medium
 
   * Placeholder; build_debian.sh and build_src.sh write the real entry.
 
- -- Dario Griffo <dariogriffo@gmail.com>  Sat, 14 Nov 2026 12:00:00 +0000
+ -- Fengnan Gao <gao.fengnan@gmail.com>  Sat, 14 Nov 2026 12:00:00 +0000

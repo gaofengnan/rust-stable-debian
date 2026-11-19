@@ -1,13 +1,15 @@
-![GitHub Release](https://img.shields.io/github/v/release/dariogriffo/rust-stable-debian)
-![GitHub Release Date](https://img.shields.io/github/release-date/dariogriffo/rust-stable-debian)
+![GitHub Release](https://img.shields.io/github/v/release/gaofengnan/rust-stable-debian)
+![GitHub Release Date](https://img.shields.io/github/release-date/gaofengnan/rust-stable-debian)
 
 <img src="rust-stable-logo.svg" alt="Rust" width="96" align="right">
 
 # rust-stable for Debian and Ubuntu
 
+> Fork of [dariogriffo/rust-stable-debian](https://github.com/dariogriffo/rust-stable-debian) (MIT); the original packaging is by Dario Griffo. Served at [deb.gaofn.xyz](https://deb.gaofn.xyz) for Debian 12 (bookworm) and 13 (trixie).
+
 This repository contains build scripts that produce **unofficial** Debian and
 Ubuntu packages (`.deb`) of the latest [Rust](https://www.rust-lang.org/)
-stable toolchain, hosted at [deb.griffo.io](https://deb.griffo.io).
+stable toolchain, hosted at [deb.gaofn.xyz](https://deb.gaofn.xyz).
 
 The packages repackage the **official Rust release components** from
 `static.rust-lang.org`, the very same files `rustup` installs. Nothing is
@@ -81,8 +83,9 @@ To go back to the distribution's toolchain:
 
 ```sh
 sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://deb.griffo.io/EA0F721D231FDD3A0A17B9AC7808B4DD62C41256.asc | sudo gpg --dearmor --yes -o /etc/apt/keyrings/deb.griffo.io.gpg
-echo "deb [signed-by=/etc/apt/keyrings/deb.griffo.io.gpg] https://deb.griffo.io/apt $(lsb_release -sc 2>/dev/null) main" | sudo tee /etc/apt/sources.list.d/deb.griffo.io.list
+sudo curl -fsSL https://deb.gaofn.xyz/deb.gaofn.xyz.gpg -o /etc/apt/keyrings/deb.gaofn.xyz.gpg
+sudo curl -fsSL https://deb.gaofn.xyz/deb.gaofn.xyz.sources -o /etc/apt/sources.list.d/deb.gaofn.xyz.sources
+# Debian 12 (bookworm): fetch deb.gaofn.xyz-bookworm.sources instead
 sudo apt update
 sudo apt install rust-stable
 ```
@@ -97,7 +100,7 @@ cargo build --release --target x86_64-unknown-linux-musl     # aarch64-unknown-l
 ### Manual installation
 
 1. Download the `.deb` files for your architecture from the
-   [Releases](https://github.com/dariogriffo/rust-stable-debian/releases) page
+   [Releases](https://github.com/gaofengnan/rust-stable-debian/releases) page
    (`rust-stable`, `rust-stable-src`, and any extra target).
 2. Install them:
 
